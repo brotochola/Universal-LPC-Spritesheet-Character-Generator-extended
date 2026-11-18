@@ -6,6 +6,9 @@ import { applyTransparencyMaskToCanvas } from "./mask.ts";
 import { canvas } from "./renderer.ts";
 import { customAnimations } from "../custom-animations.ts";
 import type { CustomAnimationDefinition } from "../custom-animations.ts";
+import { actionDurations } from "../extended/build.ts";
+import { EXTENDED_DIRECTIONS } from "../extended/format.ts";
+import { getExtendedRender } from "../extended/state.ts";
 
 declare global {
   interface Window {
@@ -26,11 +29,31 @@ let animationFrameId: number | null = null;
 let currentCustomAnimations: Record<string, CustomAnimationDefinition> = {};
 let customAnimYPositions: Record<string, number> = {}; // Y positions of custom animations in canvas
 export let activeCustomAnimation: string | null = null; // Currently selected custom animation for preview
+/** Currently selected extended action (baked rows below the sheet), if any. */
+let activeExtendedAction: string | null = null;
+/** Per-frame durations (ms) for extended actions; null = fixed 8 FPS. */
+let frameDurations: number[] | null = null;
 
 /**
  * Set which animation to preview
  */
 export function setPreviewAnimation(animationName: string): number[] {
+  activeExtendedAction = null;
+  frameDurations = null;
+
+  // Extended action: frames come from the baked rows of the extended region
+  const extended = getExtendedRender();
+  const extendedAction = extended?.region.actions[animationName];
+  if (extendedAction) {
+    activeCustomAnimation = null;
+    activeExtendedAction = animationName;
+    frameDurations = actionDurations(extendedAction);
+    animationFrames = frameDurations.map((_, i) => i);
+    animRowNum = 4;
+    currentFrameIndex = 0;
+    return animationFrames;
+  }
+
   // Check if this is a custom animation
   if (customAnimations && customAnimations[animationName]) {
     const customAnimDef = customAnimations[animationName];
@@ -108,6 +131,12 @@ function paintPreviewFrameForCycleIndex(
   let frameSize = FRAME_SIZE;
   let yOffset = 0;
 
+  const extended = activeExtendedAction ? getExtendedRender() : null;
+  const baked = extended?.region.baked[activeExtendedAction ?? ""];
+  if (activeExtendedAction && !baked) {
+    return; // region is being rebuilt; keep the last painted frame
+  }
+
   if (activeCustomAnimation && customAnimations) {
     const customAnimDef = customAnimations[activeCustomAnimation];
     if (customAnimDef) {
@@ -132,9 +161,12 @@ function paintPreviewFrameForCycleIndex(
 
   // Draw stacked rows from main canvas to preview
   for (let i = 0; i < animRowNum; i++) {
-    const srcY = activeCustomAnimation
-      ? yOffset + i * frameSize // Custom animation: use Y offset + row * frameSize
-      : (animRowStart + i) * FRAME_SIZE; // Standard animation: use row * 64
+    const srcY =
+      baked && extended
+        ? extended.offsetY + baked[EXTENDED_DIRECTIONS[i]].y // Extended action: baked row
+        : activeCustomAnimation
+          ? yOffset + i * frameSize // Custom animation: use Y offset + row * frameSize
+          : (animRowStart + i) * FRAME_SIZE; // Standard animation: use row * 64
     previewCtx.drawImage(
       tmpCanvas,
       currentFrame * frameSize, // source x
@@ -180,7 +212,8 @@ export function startPreviewAnimation(state: State): void {
   }
 
   function nextFrame(): void {
-    const fpsInterval = 1000 / 8; // 8 FPS
+    const fpsInterval =
+      frameDurations?.[currentFrameIndex % frameDurations.length] ?? 1000 / 8; // 8 FPS
     const now = Date.now();
     const elapsed = now - lastFrameTime;
 

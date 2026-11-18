@@ -13,7 +13,13 @@ import {
   exportSplitItemAnimations,
   exportSplitItemSheets,
 } from "../state/zip.ts";
-import { creditsToCsv, creditsToTxt, getAllCredits } from "../utils/credits.ts";
+import { creditsToCsv, creditsToTxt } from "../utils/credits.ts";
+import {
+  creditsWithExtended,
+  downloadExtendedJson,
+  exportExtendedZip,
+  isExtendedExportAvailable,
+} from "../extended/export.ts";
 import { debugLog } from "../utils/debug.ts";
 
 export type ClipboardCommandResult =
@@ -28,7 +34,11 @@ export type DownloadModel = {
   readonly zipByItemRunning: boolean;
   readonly zipByAnimationAndItemRunning: boolean;
   readonly zipIndividualFramesRunning: boolean;
+  /** True when the current render has the extended actions region. */
+  readonly extendedAvailable: boolean;
   saveSpritesheet(): void;
+  downloadExtendedJson(): void;
+  exportExtendedZip(): Promise<void>;
   downloadCreditsTxt(): void;
   downloadCreditsCsv(): void;
   exportZipByAnimation(): Promise<void>;
@@ -51,24 +61,22 @@ export const downloadModelFactory = {
       zipByItemRunning: state.zipByItem.isRunning,
       zipByAnimationAndItemRunning: state.zipByAnimationAndItem.isRunning,
       zipIndividualFramesRunning: state.zipIndividualFrames.isRunning,
+      extendedAvailable: isExtendedExportAvailable(state.bodyType),
       saveSpritesheet() {
         if (!window.canvasRenderer) return;
         downloadAsPNG("character-spritesheet.png");
       },
+      downloadExtendedJson() {
+        if (!window.canvasRenderer) return;
+        downloadExtendedJson();
+      },
+      exportExtendedZip: () => exportExtendedZip(catalog, state),
       downloadCreditsTxt() {
-        const credits = getAllCredits(
-          catalog,
-          state.selections,
-          state.bodyType,
-        );
+        const credits = creditsWithExtended(catalog, state);
         downloadFile(creditsToTxt(credits), "credits.txt", "text/plain");
       },
       downloadCreditsCsv() {
-        const credits = getAllCredits(
-          catalog,
-          state.selections,
-          state.bodyType,
-        );
+        const credits = creditsWithExtended(catalog, state);
         downloadFile(creditsToCsv(credits), "credits.csv", "text/csv");
       },
       exportZipByAnimation: () => exportSplitAnimations(catalog, state),

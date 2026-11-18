@@ -1,3 +1,4 @@
+import { isUrbanPath } from "../state/urban.ts";
 import type {
   CatalogReader,
   CategoryTreeNode,
@@ -88,6 +89,7 @@ export type CategoryTreeModel =
       readonly liteReady: boolean;
       readonly compactDisplay: boolean;
       readonly matchBodyColorEnabled: boolean;
+      readonly urbanOnly: boolean;
       readonly bodyTypes: BodyTypeSelectorModel;
       readonly roots: readonly ModelProvider<TreeNodeModel | null>[];
       reset(): void;
@@ -95,6 +97,7 @@ export type CategoryTreeModel =
       expandSelected(): void;
       toggleCompactDisplay(): void;
       setMatchBodyColor(enabled: boolean): void;
+      setUrbanOnly(enabled: boolean): void;
     };
 
 function itemTooltip(
@@ -216,6 +219,7 @@ function createTreeNodeModel(
   pathPrefix = "",
 ): TreeNodeModel | null {
   const nodePath = pathPrefix ? `${pathPrefix}-${name}` : name;
+  if (state.urbanOnly && !isUrbanPath(nodePath.split("-"))) return null;
   const searchQuery = state.searchQuery;
   const hasSearchMatches = nodeHasMatches(node, searchQuery, catalog);
   const isCompatible = isNodeAnimationCompatible(node, state);
@@ -249,6 +253,7 @@ function createTreeNodeModel(
     for (const itemId of node.items ?? []) {
       const lite = catalog.getItemLite(itemId).unwrapOr(null);
       if (!lite || !lite.required.includes(state.bodyType)) continue;
+      if (state.urbanOnly && !isUrbanPath(lite.path)) continue;
       if (!isItemAnimationCompatible(catalog, state, itemId) || !isCompatible)
         continue;
       if (searchQuery.length >= 2 && !matchesSearch(lite.name, searchQuery))
@@ -295,6 +300,7 @@ export const categoryTreeModelFactory = {
       liteReady: catalog.isLiteReady(),
       compactDisplay: state.compactDisplay,
       matchBodyColorEnabled: state.matchBodyColorEnabled,
+      urbanOnly: state.urbanOnly,
       bodyTypes: {
         selected: state.bodyType,
         options: BODY_TYPES.map((value) => ({
@@ -329,6 +335,9 @@ export const categoryTreeModelFactory = {
       },
       toggleCompactDisplay: () => {
         state.compactDisplay = !state.compactDisplay;
+      },
+      setUrbanOnly: (enabled) => {
+        state.urbanOnly = enabled;
       },
       setMatchBodyColor: (enabled) => {
         state.matchBodyColorEnabled = enabled;

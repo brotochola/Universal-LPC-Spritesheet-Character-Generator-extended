@@ -2,6 +2,7 @@ import { downloadFile } from "../canvas/download.ts";
 import type { CatalogReader } from "../state/catalog.ts";
 import type { State } from "../state/state.ts";
 import { creditsToCsv, creditsToTxt, getAllCredits } from "../utils/credits.ts";
+import { extendedCredits } from "../extended/state.ts";
 
 export type CreditRowModel = {
   readonly key: string;
@@ -25,12 +26,16 @@ export const creditsModelFactory = {
   create(catalog: CatalogReader, state: State): CreditsModel {
     if (!state.previewBootstrapRenderDone) return { kind: "loading" };
 
-    const credits = getAllCredits(
+    const itemCredits = getAllCredits(
       catalog,
       state.selections,
       state.bodyType,
       state.selectedAnimation,
     );
+    // The extended props (shotgun) only ship next to a character.
+    const credits = itemCredits.length
+      ? [...itemCredits, ...extendedCredits(state.bodyType)]
+      : itemCredits;
     if (credits.length === 0) return { kind: "empty" };
 
     return {

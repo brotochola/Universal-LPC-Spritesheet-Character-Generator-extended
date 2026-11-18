@@ -30,6 +30,18 @@ import {
 } from "../state/constants.ts";
 import { customAnimations, customAnimationBase } from "../custom-animations.ts";
 import {
+  buildExtendedRegion,
+  createGroupSheets,
+  groupBandY,
+  supportsExtended,
+  type GroupSheets,
+} from "../extended/build.ts";
+import { extendedGroupFor, type ExtendedGroup } from "../extended/groups.ts";
+import {
+  isExtendedActionsEnabled,
+  setExtendedRender,
+} from "../extended/state.ts";
+import {
   setCurrentCustomAnimations,
   setCustomAnimYPositions,
 } from "./preview-animation.ts";
@@ -504,6 +516,25 @@ async function runRenderCharacter(
       drawCalls.sort((a, b) => a.zPos - b.zPos);
     });
 
+    // Extended actions (main canvas only): the character is also drawn split by
+    // layer group so the extended pieces can be cut without the other groups.
+    const extendedGroups: GroupSheets | null =
+      !targetCanvas && isExtendedActionsEnabled() && supportsExtended(bodyType)
+        ? createGroupSheets(bodyType, SHEET_WIDTH)
+        : null;
+    const extendedGroupCache = new Map<string, ExtendedGroup | null>();
+    const extendedGroupOf = (item: DrawCall): ExtendedGroup | null => {
+      const key = `${item.itemId}|${item.zPos}`;
+      if (!extendedGroupCache.has(key)) {
+        const meta = catalog.getItemMerged(item.itemId);
+        extendedGroupCache.set(
+          key,
+          meta.isOk() ? extendedGroupFor(meta.value, item.zPos) : null,
+        );
+      }
+      return extendedGroupCache.get(key) ?? null;
+    };
+
     const currentCustomAnimations: Record<
       string,
       (typeof customAnimations)[string]
@@ -589,6 +620,15 @@ async function runRenderCharacter(
         span.addPhaseMs("recolor", performance.now() - recolorStart);
         const drawStart = performance.now();
         destCtx.drawImage(imageToDraw, 0, item.yPos);
+        if (extendedGroups && item.source.kind === "catalog") {
+          const bandY = groupBandY(extendedGroups, item.animation);
+          const group = bandY === null ? null : extendedGroupOf(item);
+          if (group && bandY !== null) {
+            extendedGroups.canvases[group]
+              .getContext("2d")
+              ?.drawImage(imageToDraw, 0, bandY);
+          }
+        }
         span.addPhaseMs("draw", performance.now() - drawStart);
       }
     }
@@ -668,6 +708,15 @@ async function runRenderCharacter(
         }
       }
     }
+
+    if (!targetCanvas && isExtendedActionsEnabled()) {
+      setExtendedRender(null);
+      if (extendedGroups) {
+        await span.async("extendedBuild", () =>
+          appendExtendedRegion(bodyType, extendedGroups, destCanvas, destCtx),
+        );
+      }
+    }
   } finally {
     finishRenderCharacterRedraw(state, span);
 
@@ -706,6 +755,46 @@ async function runRenderCharacter(
         "renderCharacter:end",
       );
     }
+  }
+}
+
+/**
+ * Build the extended actions region and append it below everything already on
+ * `destCanvas` (standard sheet + custom animations). Failures only log: the
+ * standard spritesheet must never depend on the extended actions.
+ */
+async function appendExtendedRegion(
+  bodyType: string,
+  groups: GroupSheets,
+  destCanvas: HTMLCanvasElement,
+  destCtx: CanvasRenderingContext2D,
+): Promise<void> {
+  try {
+    const region = await buildExtendedRegion(
+      bodyType,
+      groups,
+      destCanvas.width,
+    );
+    if (!region) return;
+    const offsetY = destCanvas.height;
+    const previous = document.createElement("canvas");
+    previous.width = destCanvas.width;
+    previous.height = destCanvas.height;
+    get2DContext(previous).drawImage(destCanvas, 0, 0);
+    destCanvas.height = offsetY + region.canvas.height;
+    destCtx.imageSmoothingEnabled = false;
+    destCtx.clearRect(0, 0, destCanvas.width, destCanvas.height);
+    destCtx.drawImage(previous, 0, 0);
+    destCtx.drawImage(region.canvas, 0, offsetY);
+    setExtendedRender({
+      region,
+      offsetY,
+      sheetWidth: destCanvas.width,
+      sheetHeight: destCanvas.height,
+    });
+  } catch (error) {
+    console.error("Extended actions could not be built:", error);
+    setExtendedRender(null);
   }
 }
 

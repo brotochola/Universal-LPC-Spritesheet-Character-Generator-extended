@@ -56,6 +56,7 @@ export const RENDER_CHARACTER_PHASE_KEYS = [
   "customLoad",
   "customRecolor",
   "customDraw",
+  "extendedBuild",
   "mithrilRedrawEnd",
 ] as const;
 
@@ -140,6 +141,7 @@ function emptyRenderCharacterPhases(): Record<
     customLoad: 0,
     customRecolor: 0,
     customDraw: 0,
+    extendedBuild: 0,
     mithrilRedrawEnd: 0,
   };
 }

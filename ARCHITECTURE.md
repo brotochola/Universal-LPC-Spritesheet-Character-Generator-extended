@@ -133,6 +133,18 @@ offscreen canvas. `renderCharacter` awaits the layers chunk and delegates to
 5. Composites custom-animation regions below the standard sheet, sorted the same
    way.
 
+### Extended region
+
+When `setExtendedActionsEnabled(true)` has run (the bootstrap does it) and the
+body type has extended actions, `runRenderCharacter` also draws every layer of
+the source animations into per-group canvases (`createGroupSheets` in
+[`sources/extended/build.ts`](sources/extended/build.ts)). After the custom
+animation regions, `appendExtendedRegion` cuts the pieces, bakes the extended
+action rows and appends them below the sheet; the result is kept in
+[`sources/extended/state.ts`](sources/extended/state.ts) for the preview and the
+exporters. A failure there only logs: the standard sheet never depends on it.
+Format and authoring: [tools/extended/README.md](tools/extended/README.md).
+
 ### The one WebGL/CPU branch
 
 Palette recoloring is the only place with two implementations, and

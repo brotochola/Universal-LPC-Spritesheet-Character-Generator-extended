@@ -33,6 +33,28 @@ const DownloadContent: m.Component<{
           { onclick: model.saveSpritesheet },
           "Spritesheet (PNG)",
         ),
+        model.extendedAvailable
+          ? m(
+              "button.button.is-small.is-primary.is-light",
+              {
+                title:
+                  "JSON with the standard frames plus the extended actions (pieces + frame-by-frame layers)",
+                onclick: model.downloadExtendedJson,
+              },
+              "Extended JSON",
+            )
+          : null,
+        model.extendedAvailable
+          ? m(
+              "button.button.is-small.is-primary.is-light",
+              {
+                title:
+                  "ZIP with the spritesheet PNG, the extended JSON and the credits",
+                onclick: model.exportExtendedZip,
+              },
+              "ZIP: PNG + extended JSON",
+            )
+          : null,
         m(
           "button.button.is-small",
           { onclick: model.downloadCreditsTxt },

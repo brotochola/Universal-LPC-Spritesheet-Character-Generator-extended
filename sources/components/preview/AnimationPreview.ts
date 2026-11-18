@@ -18,6 +18,7 @@ import PinchToZoom from "./PinchToZoom.ts";
 import { ScrollableContainer } from "./ScrollableContainer.ts";
 import { PreviewMetadataLoadingOverlay } from "./PreviewMetadataLoadingOverlay.ts";
 import type { CatalogReader } from "../../state/catalog.ts";
+import { getExtendedRender } from "../../extended/state.ts";
 
 type PreviewCanvasAttrs = {
   state: State;
@@ -148,11 +149,16 @@ export const AnimationPreview: m.Component<
   view(vnode) {
     const { catalog, state } = vnode.attrs;
     const customAnims = Object.keys(getCustomAnimations());
+    const extended = getExtendedRender();
     const allAnimations: AnimationOption[] = [
       ...ANIMATIONS,
       ...customAnims.map((anim) => ({
         value: anim,
         label: anim.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
+      })),
+      ...(extended?.region.order ?? []).map((id) => ({
+        value: id,
+        label: `${extended?.region.actions[id].label ?? id} (extended)`,
       })),
     ];
 

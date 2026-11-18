@@ -81,6 +81,7 @@ import { FullSpritesheetPreview } from "./components/preview/FullSpritesheetPrev
 
 // Import performance profiler
 import { PerformanceProfiler } from "./performance-profiler.ts";
+import { setExtendedActionsEnabled } from "./extended/state.ts";
 
 // Start metadata fetch at entry-module time so it overlaps HTML parse.
 const applicationCatalog = createLoadedCatalog();
@@ -91,6 +92,8 @@ const applicationModels = createApplicationModels(
 );
 configureStateCatalog(applicationCatalog);
 installCatalogReadinessHooksForVisualTooling(applicationCatalog);
+// Extended actions (shotgun walk/run/shoot): baked below the standard sheet.
+setExtendedActionsEnabled(true);
 
 // DEBUG mode will be turned on if on localhost and off in production
 // but this can be overridden by adding debug=(true|false) to the querystring.

@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LPC Extended Viewer</title>
+    <style>
+      :root {
+        --bg: #1d2128;
+        --panel: #272c35;
+        --text: #e6e8ec;
+        --muted: #9aa3b2;
+        --accent: #7fb2ff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          14px/1.4 system-ui,
+          sans-serif;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        align-items: center;
+        padding: 8px 16px;
+        background: var(--panel);
+      }
+      header label {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        color: var(--muted);
+      }
+      select,
+      input,
+      button {
+        font: inherit;
+        color: var(--text);
+        background: #1b1f26;
+        border: 1px solid #3a414e;
+        border-radius: 4px;
+        padding: 2px 6px;
+      }
+      #stage {
+        position: absolute;
+        inset: 0;
+        top: var(--header-h, 52px);
+      }
+      #hint {
+        position: absolute;
+        inset: 0;
+        top: var(--header-h, 52px);
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+        text-align: center;
+        padding: 16px;
+        pointer-events: none;
+      }
+      #info {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      code {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <header id="header">
+      <strong>LPC Extended Viewer</strong>
+      <label>PNG <input id="png" type="file" accept="image/png" /></label>
+      <label
+        >JSON <input id="json" type="file" accept="application/json,.json"
+      /></label>
+      <label
+        >Mode
+        <select id="mode">
+          <option value="grid">All actions × directions</option>
+          <option value="crowd">Crowd (ParticleContainer stress)</option>
+        </select>
+      </label>
+      <label
+        >Crowd
+        <input
+          id="count"
+          type="number"
+          min="1"
+          max="5000"
+          value="300"
+          style="width: 6em"
+      /></label>
+      <label
+        >Zoom <input id="zoom" type="range" min="1" max="6" step="1" value="3"
+      /></label>
+      <label
+        >Speed
+        <input id="speed" type="range" min="0.1" max="2" step="0.1" value="1"
+      /></label>
+      <label
+        ><input id="baked" type="checkbox" checked /> Baked frame next to
+        live</label
+      >
+      <span id="info"></span>
+    </header>
+    <div id="stage"></div>
+    <div id="hint">
+      <div>
+        Load the <code>character-spritesheet.png</code> and
+        <code>character-spritesheet.json</code> exported with
+        <em>ZIP: PNG + extended JSON</em> (or drop both files here).<br />
+        You can also pass them in the URL: <code>?png=…&amp;json=…</code>
+      </div>
+    </div>
+    <script type="module">
+      // Reference reader for the "lpc-extended" format, drawn with Pixi v8 ParticleContainer.
+      //
+      // Every layer of a frame becomes one Particle:
+      //   texture  = piece.rect inside the PNG
+      //   anchor   = piece.pivot / piece.size
+      //   position = characterOrigin + piece.at + (layer.x, layer.y) + piece.pivot
+      //   rotation = layer.r (degrees), scale = (layer.sx, layer.sy), alpha = layer.a
+      import {
+        Application,
+        Particle,
+        ParticleContainer,
+        Rectangle,
+        Texture,
+      } from "https://cdn.jsdelivr.net/npm/pixi.js@8.6.6/dist/pixi.min.mjs";
+
+      const DIRS = ["up", "left", "down", "right"];
+      const CELL = 64;
+      const $ = (id) => document.getElementById(id);
+      document.documentElement.style.setProperty(
+        "--header-h",
+        `${$("header").offsetHeight}px`,
+      );
+
+      const app = new Application();
+      await app.init({
+        background: "#3b4252",
+        resizeTo: $("stage"),
+        antialias: false,
+        roundPixels: true,
+      });
+      $("stage").appendChild(app.canvas);
+
+      let doc = null;
+      let source = null;
+      let pieces = {};
+      let bakedTextures = {};
+      let world = null;
+      let actors = [];
+      let maxLayers = 1;
+      let lastEvents = "";
+
+      function loadImage(url) {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = url;
+        });
+      }
+
+      async function load(pngUrl, jsonText) {
+        doc = JSON.parse(jsonText);
+        if (doc.format !== "lpc-extended")
+          throw new Error("Not an lpc-extended JSON");
+        const img = await loadImage(pngUrl);
+        source = Texture.from(img).source;
+        source.scaleMode = "nearest";
+        pieces = {};
+        for (const [name, p] of Object.entries(doc.pieces)) {
+          const [x, y, w, h] = p.rect;
+          pieces[name] = {
+            texture: new Texture({ source, frame: new Rectangle(x, y, w, h) }),
+            ax: p.pivot[0] / w,
+            ay: p.pivot[1] / h,
+            ox: p.at[0] + p.pivot[0],
+            oy: p.at[1] + p.pivot[1],
+          };
+        }
+        bakedTextures = {};
+        for (const [name, f] of Object.entries(doc.frames)) {
+          bakedTextures[name] = new Texture({
+            source,
+            frame: new Rectangle(f.frame.x, f.frame.y, f.frame.w, f.frame.h),
+          });
+        }
+        maxLayers = 1;
+        for (const a of Object.values(doc.actions))
+          for (const d of DIRS)
+            for (const f of a.directions[d])
+              maxLayers = Math.max(maxLayers, f.layers.length);
+        $("hint").style.display = "none";
+        rebuild();
+      }
+
+      function makeActor(container, id, dir, x, y, withBaked) {
+        const actor = {
+          id,
+          dir,
+          x,
+          y,
+          t: 0,
+          frame: -1,
+          particles: [],
+          baked: null,
+          vx: 0,
+          vy: 0,
+        };
+        if (withBaked) {
+          actor.baked = new Particle({
+            texture: bakedTextures[`${id}_${dir}_0`] ?? Texture.EMPTY,
+          });
+          container.addParticle(actor.baked);
+        }
+        for (let i = 0; i < maxLayers; i++) {
+          const p = new Particle({ texture: Texture.EMPTY, alpha: 0 });
+          actor.particles.push(p);
+          container.addParticle(p);
+        }
+        return actor;
+      }
+
+      function rebuild() {
+        if (!doc) return;
+        if (world) {
+          app.stage.removeChild(world);
+          world.destroy();
+        }
+        world = new ParticleContainer({
+          dynamicProperties: {
+            position: true,
+            rotation: true,
+            vertex: true,
+            uvs: true,
+            color: true,
+          },
+        });
+        const zoom = Number($("zoom").value);
+        world.scale.set(zoom);
+        app.stage.addChild(world);
+        actors = [];
+        const ids = Object.keys(doc.actions);
+        if ($("mode").value === "grid") {
+          const baked = $("baked").checked;
+          ids.forEach((id, row) => {
+            DIRS.forEach((dir, col) => {
+              const x = 8 + col * (baked ? 2 * CELL + 16 : CELL + 8);
+              const y = 8 + row * (CELL + 8);
+              actors.push(
+                makeActor(world, id, dir, x + (baked ? CELL : 0), y, baked),
+              );
+              if (baked) {
+                const a = actors[actors.length - 1];
+                a.baked.x = x;
+                a.baked.y = y;
+                a.baked.alpha = 0.85;
+              }
+            });
+          });
+        } else {
+          const n = Math.max(1, Math.min(5000, Number($("count").value) || 1));
+          const w = app.screen.width / zoom;
+          const h = app.screen.height / zoom;
+          for (let i = 0; i < n; i++) {
+            const id = ids[i % ids.length];
+            const dir = DIRS[(Math.random() * 4) | 0];
+            const a = makeActor(
+              world,
+              id,
+              dir,
+              Math.random() * w - 32,
+              Math.random() * h - 48,
+              false,
+            );
+            const speed = id.includes("run")
+              ? 90
+              : id.includes("walk")
+                ? 40
+                : 0;
+            a.vx = dir === "left" ? -speed : dir === "right" ? speed : 0;
+            a.vy = dir === "up" ? -speed : dir === "down" ? speed : 0;
+            a.t = Math.random() * 1000;
+            actors.push(a);
+          }
+        }
+      }
+
+      function applyFrame(actor, frame) {
+        for (let i = 0; i < actor.particles.length; i++) {
+          const p = actor.particles[i];
+          const layer = frame.layers[i];
+          const piece = layer && pieces[layer.p];
+          if (!piece) {
+            p.alpha = 0;
+            continue;
+          }
+          p.texture = piece.texture;
+          p.anchorX = piece.ax;
+          p.anchorY = piece.ay;
+          p.x = actor.x + piece.ox + (layer.x ?? 0);
+          p.y = actor.y + piece.oy + (layer.y ?? 0);
+          p.rotation = ((layer.r ?? 0) * Math.PI) / 180;
+          p.scaleX = layer.sx ?? 1;
+          p.scaleY = layer.sy ?? 1;
+          p.alpha = layer.a ?? 1;
+        }
+      }
+
+      app.ticker.add((ticker) => {
+        if (!doc) return;
+        const dt = ticker.deltaMS * Number($("speed").value);
+        const zoom = Number($("zoom").value);
+        const w = app.screen.width / zoom;
+        const h = app.screen.height / zoom;
+        const events = [];
+        for (const a of actors) {
+          const action = doc.actions[a.id];
+          const frames = action.directions[a.dir];
+          const total = frames.reduce((s, f) => s + f.t, 0);
+          a.t += dt;
+          if (!action.loop && a.t >= total + 400) a.t = 0; // replay one-shot actions after a pause
+          let t = action.loop ? a.t % total : Math.min(a.t, total - 1);
+          let idx = 0;
+          while (idx < frames.length - 1 && t >= frames[idx].t) {
+            t -= frames[idx].t;
+            idx++;
+          }
+          if (a.vx || a.vy) {
+            a.x += (a.vx * dt) / 1000;
+            a.y += (a.vy * dt) / 1000;
+            if (a.x > w) a.x = -CELL;
+            if (a.x < -CELL) a.x = w;
+            if (a.y > h) a.y = -CELL;
+            if (a.y < -CELL) a.y = h;
+          }
+          if (idx !== a.frame && frames[idx].events)
+            events.push(`${a.id}/${a.dir}: ${frames[idx].events.join(",")}`);
+          a.frame = idx;
+          applyFrame(a, frames[idx]);
+          if (a.baked)
+            a.baked.texture =
+              bakedTextures[`${a.id}_${a.dir}_${idx}`] ?? Texture.EMPTY;
+        }
+        if ($("mode").value === "crowd") {
+          // depth: characters lower on screen are drawn later
+          actors.sort((p, q) => p.y - q.y);
+          world.particleChildren.length = 0;
+          for (const a of actors) world.particleChildren.push(...a.particles);
+          world.update();
+        }
+        if (events.length && actors.length <= 24)
+          lastEvents = events.slice(-3).join(" · ");
+        $("info").textContent =
+          `${actors.length} characters · ${actors.length * maxLayers} particles · ${Math.round(app.ticker.FPS)} fps` +
+          (lastEvents ? ` · events: ${lastEvents}` : "");
+      });
+
+      for (const id of ["mode", "count", "zoom", "baked"])
+        $(id).addEventListener("change", rebuild);
+
+      async function fromFiles(files) {
+        const png = [...files].find(
+          (f) => f.type === "image/png" || f.name.endsWith(".png"),
+        );
+        const json = [...files].find((f) => f.name.endsWith(".json"));
+        if (!png || !json) return;
+        await load(URL.createObjectURL(png), await json.text());
+      }
+      const picked = {};
+      for (const id of ["png", "json"]) {
+        $(id).addEventListener("change", async (e) => {
+          picked[id] = e.target.files[0];
+          if (picked.png && picked.json)
+            await fromFiles([picked.png, picked.json]);
+        });
+      }
+      window.addEventListener("dragover", (e) => e.preventDefault());
+      window.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        await fromFiles(e.dataTransfer.files);
+      });
+
+      const params = new URLSearchParams(location.search);
+      if (params.get("png") && params.get("json")) {
+        const json = await (await fetch(params.get("json"))).text();
+        await load(params.get("png"), json);
+      }
+    </script>
+  </body>
+</html>

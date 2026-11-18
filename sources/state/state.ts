@@ -43,6 +43,8 @@ export type State = {
   showTransparencyGrid: boolean;
   applyTransparencyMask: boolean;
   matchBodyColorEnabled: boolean;
+  /** Hide fantasy and monster items from the item tree (see `urban.ts`). */
+  urbanOnly: boolean;
   compactDisplay: boolean;
   customUploadedImage: HTMLImageElement | null;
   customImageZPos: number;
@@ -139,6 +141,7 @@ export function createState(): State {
     showTransparencyGrid: true,
     applyTransparencyMask: false,
     matchBodyColorEnabled: true,
+    urbanOnly: true,
     compactDisplay: false,
     customUploadedImage: null,
     customImageZPos: 0,

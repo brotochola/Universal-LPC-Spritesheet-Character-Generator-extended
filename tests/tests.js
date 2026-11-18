@@ -20,6 +20,7 @@ import "./canvas/palette-recolor-preview_spec.ts";
 import "./canvas/preview-canvas_spec.js";
 import "./canvas/preview-animation_spec.js";
 import "./canvas/renderer_spec.ts";
+import "./extended/extended-build_spec.ts";
 import "./canvas/renderer-composite_spec.ts";
 import "./canvas/render-work_spec.ts";
 import "./canvas/render-call-count_spec.ts";

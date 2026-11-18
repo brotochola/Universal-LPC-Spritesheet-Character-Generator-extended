@@ -87,6 +87,25 @@ export const CategoryTree: m.Component<{
           "Auto-update heads, ears, and other items when body color changes",
         ),
       ]),
+      m("div.mb-3", [
+        m(
+          "label.checkbox",
+          {
+            title:
+              "Hide fantasy and monster items (non-human heads, wings, tails, armour, medieval weapons...)",
+          },
+          [
+            m("input[type=checkbox]", {
+              id: "urban-only-checkbox",
+              checked: model.urbanOnly,
+              onchange: (event: Event) => {
+                model.setUrbanOnly((event.target as HTMLInputElement).checked);
+              },
+            }),
+            " Urban characters only",
+          ],
+        ),
+      ]),
       m("div", [
         m(BodyTypeSelector, { model: model.bodyTypes }),
         model.roots.map((root) =>

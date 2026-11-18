@@ -30,6 +30,24 @@ This was originally based on https://github.com/makrohn/Universal-LPC-spriteshee
 
 [@ElizaWy](https://github.com/ElizaWy) has revised and expanded the LPC paradigm. See https://github.com/ElizaWy/LPC
 
+### This fork: extended actions and urban characters
+
+This fork ([Universal-LPC-Spritesheet-Character-Generator-extended](https://github.com/brotochola/Universal-LPC-Spritesheet-Character-Generator-extended))
+keeps every item and animation of the generator and adds:
+
+- **Extended actions** (male and female): *shotgun walk*, *shotgun run* and
+  *shotgun shoot*, built by cutting the character into pieces (legs, upper body,
+  arms, head...) and laying them out frame by frame with position, rotation and
+  scale. They are baked as extra rows below the standard sheet, followed by an
+  atlas with the separated pieces, and described by an extended JSON
+  (**Download → Extended JSON** / **ZIP: PNG + extended JSON**). See
+  [tools/extended/README.md](tools/extended/README.md) for the format and
+  [tools/extended-viewer/index.html](tools/extended-viewer/index.html) for a Pixi v8
+  `ParticleContainer` reader.
+- **Urban characters only**: a checkbox above the item tree (on by default) hides
+  fantasy and monster items (non-human heads, wings, tails, armour, medieval
+  weapons...). Nothing is deleted; turn it off to see everything.
+
 ### Licensing and Attribution (Credits)
 
 Each piece of artwork distributed from this project (all images in the `spritesheets` subdirectory) is licensed under one or more of the following supported open license(s):
